@@ -29,7 +29,7 @@ struct DeletionQueue
 class Renderer
 {
   public:
-    virtual void run(int frame) = 0;
+    virtual void render(int frameNum) = 0;
     // virtual void resizeSwapchain(int width, int height) = 0;
 };
 

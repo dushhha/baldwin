@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <iostream>
+#include <stdexcept>
 
 #include "renderer/vulkan/vulkan_renderer.hpp"
 
@@ -16,27 +17,27 @@ Engine::Engine(int width, int height, RenderAPI api)
   , _height(height)
   , _api(api)
 {
+    assert(loadedEngine == nullptr && "Another engine is already running");
 
-    assert(loadedEngine == nullptr);
-    // TODO: replace assert by user error handling
-    assert(initWindow() == true);
+    std::cout << "--- Engine init ---\n";
+    if (!initWindow())
+        throw(::std::runtime_error("Could not init GLFW window"));
+
     switch (_api)
     {
-            /* Always defaults to vulkan for now */
+        /* Always defaults to vulkan for now */
         default:
             _renderer = std::move(std::make_unique<vk::VulkanRenderer>(
               _window, _width, _height, false));
     }
-
-    std::cout << "- Engine init\n";
 }
 
 bool Engine::initWindow()
 {
-    assert(glfwInit() == 1);
+    if (glfwInit() != 1)
+        throw(std::runtime_error("Could not call glfwInit"));
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    /*glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);*/
 
     _window = glfwCreateWindow(
       _width, _height, "Baldwin Engine", nullptr, nullptr);
@@ -63,22 +64,21 @@ void Engine::resizeCallback(GLFWwindow* w, int width, int height)
 
 void Engine::run()
 {
-    std::cout << "- Engine run\n";
+    std::cout << "--- Engine run ---\n";
 
     while (!glfwWindowShouldClose(_window))
     {
         glfwPollEvents();
-        _renderer->run(_frame);
+        _renderer->render(_frame);
         _frame++;
     }
 }
 
 Engine::~Engine()
 {
+    std::cout << "--- Engine cleanup ---\n";
     glfwDestroyWindow(_window);
     glfwTerminate();
-
-    std::cout << "- Engine cleanup\n";
 }
 
 } // namespace baldwin

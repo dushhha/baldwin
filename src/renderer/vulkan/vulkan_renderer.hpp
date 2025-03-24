@@ -1,9 +1,12 @@
-#pragma ocne
+#pragma once
 
 #include "renderer/renderer.hpp"
 
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
+
+#include "vulkan_swapchain.hpp"
+#include "vulkan_device.hpp"
 
 namespace baldwin
 {
@@ -29,13 +32,20 @@ class VulkanRenderer : public Renderer
     VulkanRenderer(const VulkanRenderer&) = delete;
     VulkanRenderer& operator=(const VulkanRenderer&) = delete;
 
-    void run(int frame) override;
+    void render(int frameNum) override;
 
   private:
+    void initCommands();
+    void initSync();
+    // void initPBRPipeline();
+    void draw(int frameNum);
+
+    VulkanDevice _device;
+    VulkanSwapchain _swapchain;
+
     DeletionQueue _deletionQueue{};
     std::vector<FrameData> _frames{};
-    // TODO: init this
-    const int _frameOverlap = 2;
+    int _frameOverlap = 2;
     FrameData& getCurrentFrame(int frameNum)
     {
         return _frames[frameNum % _frameOverlap];
