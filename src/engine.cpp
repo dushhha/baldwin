@@ -19,16 +19,19 @@ Engine::Engine(int width, int height, RenderAPI api)
 {
     assert(loadedEngine == nullptr && "Another engine is already running");
 
-    std::cout << "--- Engine init ---\n";
+#ifndef NDEBUG
+    std::cout << "=== Engine init === \n";
+#endif
+
     if (!initWindow())
         throw(::std::runtime_error("Could not init GLFW window"));
 
     switch (_api)
     {
-        /* Always defaults to vulkan for now */
+        // NOTE: Always defaults to vulkan for now
         default:
-            _renderer = std::move(std::make_unique<vk::VulkanRenderer>(
-              _window, _width, _height, false));
+            _renderer = std::make_unique<vk::VulkanRenderer>(
+              _window, _width, _height, false);
     }
 }
 
@@ -64,7 +67,9 @@ void Engine::resizeCallback(GLFWwindow* w, int width, int height)
 
 void Engine::run()
 {
-    std::cout << "--- Engine run ---\n";
+#ifndef NDEBUG
+    std::cout << "=== Engine run === \n";
+#endif
 
     while (!glfwWindowShouldClose(_window))
     {
@@ -76,7 +81,12 @@ void Engine::run()
 
 Engine::~Engine()
 {
-    std::cout << "--- Engine cleanup ---\n";
+#ifndef NDEBUG
+    std::cout << "=== Engine cleanup === \n";
+#endif
+
+    loadedEngine = nullptr;
+    _renderer.reset();
     glfwDestroyWindow(_window);
     glfwTerminate();
 }

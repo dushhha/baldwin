@@ -1,7 +1,7 @@
 #include "vulkan_swapchain.hpp"
 
+#include <iostream>
 #include <VkBootstrap.h>
-#include <vulkan/vulkan_core.h>
 
 namespace baldwin
 {
@@ -61,7 +61,13 @@ void VulkanSwapchain::resizeSwapchain(int width, int height)
     createSwapchain(width, height);
 }
 
-VulkanSwapchain::~VulkanSwapchain() { destroySwapchain(); }
+VulkanSwapchain::~VulkanSwapchain()
+{
+#ifndef NDEBUG
+    std::cout << "-- VulkanSwapchain cleanup\n";
+#endif
+    destroySwapchain();
+}
 
 } // namespace vk
 } // namespace baldwin

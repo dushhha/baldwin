@@ -1,8 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+
+#include "vulkan_types.hpp"
 
 namespace baldwin
 {
@@ -40,6 +43,13 @@ class VulkanDevice
     VkQueue presentQueue() { return _presentQueue; }
     QueueFamilies queueFamilies() { return _queueFamilies; };
 
+    Image createImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage,
+                      bool mipmapped = false);
+    void destroyImage(Image& image);
+    Buffer createBuffer(size_t size, VkBufferUsageFlags usageFlags,
+                        VmaMemoryUsage memoryUsage);
+    void destroyBuffer(Buffer& buffer);
+
   private:
     VkInstance _instance = VK_NULL_HANDLE;
     VkPhysicalDevice _gpu = VK_NULL_HANDLE;
@@ -48,6 +58,8 @@ class VulkanDevice
     VkQueue _graphicsQueue = VK_NULL_HANDLE;
     VkQueue _presentQueue = VK_NULL_HANDLE;
     QueueFamilies _queueFamilies = {};
+    VkDebugUtilsMessengerEXT _debugMessenger = VK_NULL_HANDLE;
+    VmaAllocator _allocator = VK_NULL_HANDLE;
 };
 
 } // namespace vk

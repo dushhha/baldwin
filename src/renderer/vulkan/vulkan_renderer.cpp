@@ -1,9 +1,10 @@
-#define VMA_IMPLEMENTATION
 #define GLFW_INCLUDE_VULKAN
+#define VMA_IMPLEMENTATION
 #include "vulkan_renderer.hpp"
 
 #include <iostream>
 #include <cmath>
+#include <cassert>
 
 #include "vulkan_images.hpp"
 #include "vulkan_utils.hpp"
@@ -24,10 +25,13 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* window, int width, int height,
 
     initCommands();
     initSync();
+    initDefaultImages();
 }
 
 void VulkanRenderer::initCommands()
 {
+    assert(_device.handle() != VK_NULL_HANDLE);
+
     // Frames
     VkCommandPoolCreateInfo poolInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -54,7 +58,7 @@ void VulkanRenderer::initCommands()
 
         _frames.push_back(frame);
         _frames[i].deletionQueue.pushFunction(
-          [this, i]()
+          [&, i]()
           {
               vkFreeCommandBuffers(_device.handle(),
                                    _frames[i].commandPool,
@@ -68,6 +72,8 @@ void VulkanRenderer::initCommands()
 
 void VulkanRenderer::initSync()
 {
+    assert(_device.handle() != VK_NULL_HANDLE);
+
     VkSemaphoreCreateInfo semaphoreInfo = {
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO
     };
@@ -94,7 +100,7 @@ void VulkanRenderer::initSync()
           "Could not create frame renderFence");
 
         _frames[i].deletionQueue.pushFunction(
-          [this, i]()
+          [&, i]()
           {
               vkDestroyFence(_device.handle(), _frames[i].renderFence, nullptr);
               vkDestroySemaphore(
@@ -103,6 +109,33 @@ void VulkanRenderer::initSync()
                 _device.handle(), _frames[i].swapSemaphore, nullptr);
           });
     }
+}
+
+void VulkanRenderer::initDefaultImages()
+{
+    assert(_device.handle() != VK_NULL_HANDLE);
+    assert(_swapchain.handle() != VK_NULL_HANDLE);
+
+    VkExtent3D size = { _swapchain.extent().width,
+                        _swapchain.extent().height,
+                        1 };
+    VkImageUsageFlags colorUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                   VK_IMAGE_USAGE_STORAGE_BIT |
+                                   VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                                   VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    _drawImage = _device.createImage(
+      size, VK_FORMAT_R16G16B16A16_SFLOAT, colorUsage, false);
+
+    VkImageUsageFlags depthUsage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    _depthImage = _device.createImage(
+      size, VK_FORMAT_D32_SFLOAT, depthUsage, false);
+
+    _deletionQueue.pushFunction(
+      [&]()
+      {
+          _device.destroyImage(_drawImage);
+          _device.destroyImage(_depthImage);
+      });
 }
 
 void VulkanRenderer::draw(int frameNum)
@@ -135,7 +168,7 @@ void VulkanRenderer::draw(int frameNum)
              "Could not begin command recording");
 
     createImageBarrierWithTransition(cmd,
-                                     _swapchain.image(swapchainImgIndex),
+                                     _drawImage.handle,
                                      VK_IMAGE_LAYOUT_UNDEFINED,
                                      VK_IMAGE_LAYOUT_GENERAL);
 
@@ -144,15 +177,30 @@ void VulkanRenderer::draw(int frameNum)
     VkImageSubresourceRange srcRange = getImageSubresourceRange(
       VK_IMAGE_ASPECT_COLOR_BIT);
     vkCmdClearColorImage(cmd,
-                         _swapchain.image(swapchainImgIndex),
+                         _drawImage.handle,
                          VK_IMAGE_LAYOUT_GENERAL,
                          &clearValue,
                          1,
                          &srcRange);
 
     createImageBarrierWithTransition(cmd,
-                                     _swapchain.image(swapchainImgIndex),
+                                     _drawImage.handle,
                                      VK_IMAGE_LAYOUT_GENERAL,
+                                     VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    createImageBarrierWithTransition(cmd,
+                                     _swapchain.image(swapchainImgIndex),
+                                     VK_IMAGE_LAYOUT_UNDEFINED,
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+    copyImageToImage(cmd,
+                     _drawImage.handle,
+                     _swapchain.image(swapchainImgIndex),
+                     _drawExtent,
+                     _swapchain.extent());
+
+    createImageBarrierWithTransition(cmd,
+                                     _swapchain.image(swapchainImgIndex),
+                                     VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                                      VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     VK_CHECK(vkEndCommandBuffer(cmd), "Could not end command recording");
@@ -193,6 +241,9 @@ void VulkanRenderer::render(int frameNum) { draw(frameNum); }
 
 VulkanRenderer::~VulkanRenderer()
 {
+#ifndef NDEBUG
+    std::cout << "- VulkanRenderer cleanup\n";
+#endif
     vkDeviceWaitIdle(_device.handle());
     for (auto& frame : _frames)
     {
