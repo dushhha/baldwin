@@ -59,10 +59,18 @@ void Engine::resizeCallback(GLFWwindow* w, int width, int height)
         Engine* engine = static_cast<Engine*>(glfwGetWindowUserPointer(w));
 
         if (engine)
-        {
-            // engine->getRenderer()->resizeSwapchain(width, height);
-        }
+            engine->getRenderer()->resizeSwapchain(width, height);
     }
+}
+
+void Engine::addToScene(const std::vector<std::shared_ptr<Mesh>>& meshes)
+{
+    for (auto& mesh : meshes)
+    {
+        _scene.push_back(mesh);
+        _renderer->uploadMesh(mesh);
+    }
+    std::cout << "Scene size :" << _scene.size() << std::endl;
 }
 
 void Engine::run()
@@ -74,7 +82,7 @@ void Engine::run()
     while (!glfwWindowShouldClose(_window))
     {
         glfwPollEvents();
-        _renderer->render(_frame);
+        _renderer->render(_frame, _scene);
         _frame++;
     }
 }

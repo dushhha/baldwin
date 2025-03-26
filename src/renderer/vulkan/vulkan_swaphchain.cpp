@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <VkBootstrap.h>
+#include <vulkan/vulkan_core.h>
 
 namespace baldwin
 {
@@ -39,7 +40,7 @@ void VulkanSwapchain::createSwapchain(int width, int height)
     _swapchain = vkbSwapchain.swapchain;
     _images = vkbSwapchain.get_images().value();
     _imageViews = vkbSwapchain.get_image_views().value();
-    _sane = true;
+    sane = true;
 }
 
 void VulkanSwapchain::destroySwapchain()
@@ -51,8 +52,9 @@ void VulkanSwapchain::destroySwapchain()
     vkDestroySwapchainKHR(_device.handle(), _swapchain, nullptr);
 }
 
-void VulkanSwapchain::resizeSwapchain(int width, int height)
+void VulkanSwapchain::reconstruct(int width, int height)
 {
+    assert(_device.handle() != VK_NULL_HANDLE);
     assert(_swapchain != VK_NULL_HANDLE &&
            "Resize swapchain called before creation");
 

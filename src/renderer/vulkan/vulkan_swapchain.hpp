@@ -26,7 +26,9 @@ class VulkanSwapchain
     VkImage image(int i) { return _images[i]; };
     VkImageView imageView(int i) { return _imageViews[i]; };
 
-    void resizeSwapchain(int width, int height);
+    void reconstruct(int width, int height);
+
+    bool sane = false;
 
   private:
     void createSwapchain(int width, int height);
@@ -38,7 +40,6 @@ class VulkanSwapchain
     std::vector<VkImage> _images;
     std::vector<VkImageView> _imageViews;
     VkExtent2D _extent = { 0, 0 };
-    bool _sane = false;
 };
 
 } // namespace vk

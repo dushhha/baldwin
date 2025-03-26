@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
+#include <vulkan/vulkan_core.h>
 
 namespace baldwin
 {
@@ -22,6 +23,13 @@ struct Image
     VmaAllocation allocation = VK_NULL_HANDLE;
     VkExtent3D extent = {};
     VkFormat format = VK_FORMAT_UNDEFINED;
+};
+
+struct MeshBuffers
+{
+    Buffer vertexBuffer;
+    Buffer indexBuffer;
+    VkDeviceAddress vertexBufferAddress;
 };
 
 } // namespace vk

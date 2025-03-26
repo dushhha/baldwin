@@ -3,6 +3,7 @@
 #include <memory>
 #include <GLFW/glfw3.h>
 
+#include "scene/mesh.hpp"
 #include "renderer/renderer.hpp"
 
 namespace baldwin
@@ -23,12 +24,14 @@ class Engine
     void run();
 
     Renderer* getRenderer() { return _renderer.get(); }
+    void addToScene(const std::vector<std::shared_ptr<Mesh>>& meshes);
 
   private:
     bool initWindow();
     static void resizeCallback(GLFWwindow* w, int width, int height);
     bool initImgui();
 
+    std::vector<std::shared_ptr<Mesh>> _scene;
     int _frame = 0;
     int _width, _height;
     GLFWwindow* _window = nullptr;

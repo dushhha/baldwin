@@ -1,8 +1,11 @@
 #pragma once
 
 #include <deque>
+#include <memory>
 #include <functional>
 #include <GLFW/glfw3.h>
+
+#include "scene/mesh.hpp"
 
 namespace baldwin
 {
@@ -30,8 +33,10 @@ class Renderer
 {
   public:
     virtual ~Renderer() {};
-    virtual void render(int frameNum) = 0;
-    // virtual void resizeSwapchain(int width, int height) = 0;
+    virtual void render(int frameNum,
+                        const std::vector<std::shared_ptr<Mesh>>& scene) = 0;
+    virtual void uploadMesh(const std::shared_ptr<Mesh> mesh) = 0;
+    virtual void resizeSwapchain(int width, int height) = 0;
 };
 
 } // namespace baldwin

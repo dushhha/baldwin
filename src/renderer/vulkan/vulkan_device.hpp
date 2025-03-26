@@ -1,9 +1,12 @@
 #pragma once
 
 #include <cstdint>
+#include <vector>
+#include <functional>
 #include <vk_mem_alloc.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include <vulkan/vulkan_core.h>
 
 #include "vulkan_types.hpp"
 
@@ -49,8 +52,13 @@ class VulkanDevice
     Buffer createBuffer(size_t size, VkBufferUsageFlags usageFlags,
                         VmaMemoryUsage memoryUsage);
     void destroyBuffer(Buffer& buffer);
+    VkShaderModule createShaderModule(const std::vector<char>& code);
+    void destroyShaderModule(VkShaderModule& module);
+
+    void immediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
 
   private:
+    void initImmediate();
     VkInstance _instance = VK_NULL_HANDLE;
     VkPhysicalDevice _gpu = VK_NULL_HANDLE;
     VkDevice _device = VK_NULL_HANDLE;
@@ -60,6 +68,9 @@ class VulkanDevice
     QueueFamilies _queueFamilies = {};
     VkDebugUtilsMessengerEXT _debugMessenger = VK_NULL_HANDLE;
     VmaAllocator _allocator = VK_NULL_HANDLE;
+    VkCommandPool _immediateCommandPool = VK_NULL_HANDLE;
+    VkCommandBuffer _immediateCommandBuffer = VK_NULL_HANDLE;
+    VkFence _immediateFence = VK_NULL_HANDLE;
 };
 
 } // namespace vk
