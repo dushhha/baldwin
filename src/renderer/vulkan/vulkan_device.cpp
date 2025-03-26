@@ -56,6 +56,7 @@ VulkanDevice::VulkanDevice(GLFWwindow* window)
     };
     features12.bufferDeviceAddress = true;
     features12.descriptorIndexing = true;
+    features12.descriptorBindingUniformBufferUpdateAfterBind = true;
 
     vkb::PhysicalDeviceSelector selector{ vkbInst };
     vkb::PhysicalDevice physicalDevice = selector.set_minimum_version(1, 3)

@@ -18,7 +18,8 @@ if(NOT DEFINED Vulkan_GLSLC_EXECUTABLE)
   )
 endif()
 # Shader compilation pipeline
-file(GLOB SHADERS "${SHADER_DIR}/*.glsl")
+file(GLOB SHADERS "${SHADER_DIR}/*.frag.glsl" "${SHADER_DIR}/*.vert.glsl"
+     "${SHADER_DIR}/*.comp.glsl")
 file(MAKE_DIRECTORY ${COMPILED_SHADER_DIR})
 foreach(SHADER IN LISTS SHADERS)
   get_filename_component(FILENAME ${SHADER} NAME)

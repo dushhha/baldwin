@@ -1,20 +1,25 @@
-#include <stdexcept>
-#include <vulkan/vulkan_core.h>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float3.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #define GLFW_INCLUDE_VULKAN
 #define VMA_IMPLEMENTATION
+
 #include "vulkan_renderer.hpp"
 
 #include <iostream>
 #include <cmath>
 #include <cassert>
+#include <stdexcept>
+#include <vulkan/vulkan_core.h>
 #include <glm/gtx/transform.hpp>
 
 #include "vulkan_images.hpp"
 #include "vulkan_utils.hpp"
 #include "vulkan_infos.hpp"
 #include "vulkan_pipelines.hpp"
+#include "vulkan_descriptors.hpp"
 #include "renderer/shaders.hpp"
+#include "renderer/render_types.hpp"
 
 namespace baldwin
 {
@@ -31,8 +36,10 @@ VulkanRenderer::VulkanRenderer(GLFWwindow* window, int width, int height,
 
     initCommands();
     initSync();
-    initDefaultImages();
-    initVertexColorPipeline();
+    initRenderTargets();
+    initDefaultData();
+    initSceneDescriptors();
+    initDiffusePipeline();
 }
 
 void VulkanRenderer::initCommands()
@@ -118,7 +125,7 @@ void VulkanRenderer::initSync()
     }
 }
 
-void VulkanRenderer::initDefaultImages()
+void VulkanRenderer::initRenderTargets()
 {
     assert(_device.handle() != VK_NULL_HANDLE);
     assert(_swapchain.handle() != VK_NULL_HANDLE);
@@ -143,38 +150,90 @@ void VulkanRenderer::initDefaultImages()
       });
 }
 
-void VulkanRenderer::initVertexColorPipeline()
+void VulkanRenderer::initDefaultData()
+{
+    // Scene uniform buffer
+    assert(_device.handle() != VK_NULL_HANDLE);
+    _sceneUniformBuffer = _device.createBuffer(
+      sizeof(SceneData),
+      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+      VMA_MEMORY_USAGE_CPU_TO_GPU);
+
+    _deletionQueue.pushFunction(
+      [&]()
+      {
+          _device.destroyBuffer(_sceneUniformBuffer);
+      });
+}
+
+void VulkanRenderer::initSceneDescriptors()
+{
+    DescriptorLayoutBuilder layoutBuilder;
+    layoutBuilder.addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1);
+
+    VkDescriptorBindingFlags
+      bindingFlag = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT_EXT;
+    VkDescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsInfo = {
+        .sType =
+          VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindingFlags = &bindingFlag
+    };
+    _sceneLayout = layoutBuilder.build(
+      _device.handle(),
+      VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+      &bindingFlagsInfo,
+      VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
+
+    std::vector<DescriptorManager::PoolSizeRatio> ratios = {
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1 }
+    };
+    _descriptorManager.init(_device.handle(), 10, ratios);
+    _sceneSet = _descriptorManager.allocate(
+      _device.handle(), _sceneLayout, nullptr);
+
+    _deletionQueue.pushFunction(
+      [&]()
+      {
+          _descriptorManager.destroyPools(_device.handle());
+          vkDestroyDescriptorSetLayout(_device.handle(), _sceneLayout, nullptr);
+      });
+}
+
+void VulkanRenderer::initDiffusePipeline()
 {
     assert(_device.handle() != VK_NULL_HANDLE);
+    assert(_sceneLayout != VK_NULL_HANDLE);
 
     // Pipeline layout
     VkPushConstantRange range = { .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
                                   .offset = 0,
-                                  .size = sizeof(TempPushConstant) };
-    VkPipelineLayoutCreateInfo triangleLayoutInfo = {
+                                  .size = sizeof(RasterizePushConstants) };
+
+    VkPipelineLayoutCreateInfo diffuseLayout = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 0,
+        .setLayoutCount = 1,
+        .pSetLayouts = &_sceneLayout,
         .pushConstantRangeCount = 1,
         .pPushConstantRanges = &range
     };
-    VK_CHECK(vkCreatePipelineLayout(_device.handle(),
-                                    &triangleLayoutInfo,
-                                    nullptr,
-                                    &_vertexColorPipelineLayout),
-             "Could not create triangle pipeline layout");
+    VK_CHECK(
+      vkCreatePipelineLayout(
+        _device.handle(), &diffuseLayout, nullptr, &_diffusePipelineLayout),
+      "Could not create diffuse pipeline layout");
 
     // Modules
-    auto vertCode = readShaderFile("shaders/vertex_color.vert.spv");
+    auto vertCode = readShaderFile("shaders/diffuse.vert.spv");
     assert(!vertCode.empty());
     VkShaderModule vertModule = _device.createShaderModule(vertCode);
 
-    auto fragCode = readShaderFile("shaders/vertex_color.frag.spv");
+    auto fragCode = readShaderFile("shaders/diffuse.frag.spv");
     assert(!fragCode.empty());
     VkShaderModule fragModule = _device.createShaderModule(fragCode);
 
     // Pipeline
     GraphicsPipelineBuilder builder = {};
-    builder._pipelineLayout = _vertexColorPipelineLayout;
+    builder._pipelineLayout = _diffusePipelineLayout;
     builder.setShaders(vertModule, fragModule);
     builder.setInputTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
     builder.setPolygonMode(VK_POLYGON_MODE_FILL);
@@ -184,7 +243,7 @@ void VulkanRenderer::initVertexColorPipeline()
     builder.setColorAttachment(_drawImage.format);
     builder.setDepthFormat(_depthImage.format);
     builder.enableDepthTest(true, VK_COMPARE_OP_LESS_OR_EQUAL);
-    _vertexColorPipeline = builder.build(_device.handle());
+    _diffusePipeline = builder.build(_device.handle());
 
     _device.destroyShaderModule(fragModule);
     _device.destroyShaderModule(vertModule);
@@ -193,8 +252,8 @@ void VulkanRenderer::initVertexColorPipeline()
       [&]()
       {
           vkDestroyPipelineLayout(
-            _device.handle(), _vertexColorPipelineLayout, nullptr);
-          vkDestroyPipeline(_device.handle(), _vertexColorPipeline, nullptr);
+            _device.handle(), _diffusePipelineLayout, nullptr);
+          vkDestroyPipeline(_device.handle(), _diffusePipeline, nullptr);
       });
 }
 
@@ -266,6 +325,37 @@ void VulkanRenderer::uploadMesh(const std::shared_ptr<Mesh> mesh)
     }
 }
 
+void VulkanRenderer::updateSceneBuffer(const VkCommandBuffer& cmd)
+{
+    // TODO: Replace dummy data by real scene data
+    SceneData dummySceneData = {};
+    dummySceneData.view = glm::translate(glm::vec3{ 0, 0, -3 });
+    dummySceneData.proj = glm::perspective(glm::radians(70.f),
+                                           (float)_drawExtent.width /
+                                             (float)_drawExtent.height,
+                                           0.1f,
+                                           10.0f);
+
+    dummySceneData.proj[1][1] *= -1;
+    dummySceneData.viewproj = dummySceneData.proj * dummySceneData.view;
+
+    dummySceneData.ambientColor = glm::vec4(0.8, 0.8, 0.9, 0.3);
+    dummySceneData.sunlightDirection = glm::vec4(0.5, 1.0, 0.2, 0.0);
+    dummySceneData.sunlightColor = glm::vec4(1.0, 1.0, 0.9, 1.0);
+
+    SceneData* bufferSceneData = static_cast<SceneData*>(
+      _sceneUniformBuffer.allocation->GetMappedData());
+    *bufferSceneData = dummySceneData;
+
+    DescriptorWriter writer{};
+    writer.writeBuffer(0,
+                       _sceneUniformBuffer.handle,
+                       _sceneUniformBuffer.allocationInfo.size,
+                       0,
+                       VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    writer.updateSet(_device.handle(), _sceneSet);
+}
+
 void VulkanRenderer::drawObjects(
   const VkCommandBuffer& cmd, const std::vector<std::shared_ptr<Mesh>>& scene)
 {
@@ -279,8 +369,15 @@ void VulkanRenderer::drawObjects(
       _drawExtent, &colorAttachment, &depthAttachment);
     vkCmdBeginRendering(cmd, &renderInfo);
 
-    vkCmdBindPipeline(
-      cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _vertexColorPipeline);
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, _diffusePipeline);
+    vkCmdBindDescriptorSets(cmd,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            _diffusePipelineLayout,
+                            0,
+                            1,
+                            &_sceneSet,
+                            0,
+                            nullptr);
 
     // Dynamic viewport and scissor
     // The vp defines the transformation from the image to the framebuffer
@@ -305,23 +402,15 @@ void VulkanRenderer::drawObjects(
             continue;
 
         auto meshBuffers = _meshBuffersMap[mesh->uuid];
-        TempPushConstant pc = {
+        RasterizePushConstants pc = {
             .vertexBufferAddress = meshBuffers.vertexBufferAddress
         };
-
-        glm::mat4 view = glm::translate(glm::vec3{ 0, 0, -3 });
-        glm::mat4 projection = glm::perspective(glm::radians(70.f),
-                                                (float)_drawExtent.width /
-                                                  (float)_drawExtent.height,
-                                                0.1f,
-                                                10.0f);
-        projection[1][1] *= -1;
-        pc.worldMatrix = projection * view;
+        pc.worldMatrix = glm::identity<glm::mat4>();
         vkCmdPushConstants(cmd,
-                           _vertexColorPipelineLayout,
+                           _diffusePipelineLayout,
                            VK_SHADER_STAGE_VERTEX_BIT,
                            0,
-                           sizeof(TempPushConstant),
+                           sizeof(RasterizePushConstants),
                            &pc);
 
         vkCmdBindIndexBuffer(
@@ -343,25 +432,20 @@ void VulkanRenderer::draw(int frameNum,
 
     // Request swapchain image index that we can blit on
     uint32_t swapchainImgIndex;
-    if (_swapchain.sane)
-    {
-        VkResult r = vkAcquireNextImageKHR(
-          _device.handle(),
-          _swapchain.handle(),
-          1000000,
-          getCurrentFrame(frameNum).swapSemaphore,
-          nullptr,
-          &swapchainImgIndex);
-
-        if (r == VK_ERROR_OUT_OF_DATE_KHR)
-            _swapchain.sane = false;
-        else if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR)
-            throw(std::runtime_error("Could not acquire swapchain image"));
-    }
-    else
-    {
+    if (!_swapchain.sane)
         return;
-    }
+
+    VkResult r = vkAcquireNextImageKHR(_device.handle(),
+                                       _swapchain.handle(),
+                                       1000000,
+                                       getCurrentFrame(frameNum).swapSemaphore,
+                                       nullptr,
+                                       &swapchainImgIndex);
+
+    if (r == VK_ERROR_OUT_OF_DATE_KHR)
+        _swapchain.sane = false;
+    else if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR)
+        throw(std::runtime_error("Could not acquire swapchain image"));
 
     _drawExtent.height = std::min(_swapchain.extent().height,
                                   _drawImage.extent.height);
@@ -402,6 +486,8 @@ void VulkanRenderer::draw(int frameNum,
                                      _depthImage.handle,
                                      VK_IMAGE_LAYOUT_UNDEFINED,
                                      VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL);
+
+    updateSceneBuffer(cmd);
     drawObjects(cmd, scene);
 
     createImageBarrierWithTransition(cmd,
@@ -455,7 +541,8 @@ void VulkanRenderer::draw(int frameNum,
         .pSwapchains = &swapchainHandle,
         .pImageIndices = &swapchainImgIndex
     };
-    VkResult r = vkQueuePresentKHR(_device.presentQueue(), &presentInfo);
+
+    r = vkQueuePresentKHR(_device.presentQueue(), &presentInfo);
     if (r == VK_ERROR_OUT_OF_DATE_KHR)
         _swapchain.sane = false;
     else if (r != VK_SUCCESS && r != VK_SUBOPTIMAL_KHR)

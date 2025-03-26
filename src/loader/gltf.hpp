@@ -5,7 +5,7 @@
 #include <memory>
 #include <filesystem>
 
-#include "scene/mesh.hpp"
+#include "renderer/render_types.hpp"
 
 namespace baldwin
 {

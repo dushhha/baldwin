@@ -11,33 +11,16 @@
 #include <vulkan/vulkan_core.h>
 #include <glm/mat4x4.hpp>
 
+#include "renderer/vulkan/vulkan_descriptors.hpp"
 #include "vulkan_swapchain.hpp"
 #include "vulkan_device.hpp"
 #include "vulkan_types.hpp"
-#include "scene/mesh.hpp"
+#include "renderer/render_types.hpp"
 
 namespace baldwin
 {
 namespace vk
 {
-
-struct DeletionQueue
-{
-    std::deque<std::function<void()>> deletors;
-
-    void pushFunction(std::function<void()>&& function)
-    {
-        deletors.push_back(function);
-    }
-
-    void flush()
-    {
-        // reverse iterate the deletion queue to execute all the functions
-        for (auto it = deletors.rbegin(); it != deletors.rend(); it++)
-            (*it)();
-        deletors.clear();
-    }
-};
 
 struct FrameData
 {
@@ -66,8 +49,11 @@ class VulkanRenderer : public Renderer
   private:
     void initCommands();
     void initSync();
-    void initDefaultImages();
-    void initVertexColorPipeline();
+    void initRenderTargets();
+    void initDefaultData();
+    void initSceneDescriptors();
+    void initDiffusePipeline();
+    void updateSceneBuffer(const VkCommandBuffer& cmd);
     void drawObjects(const VkCommandBuffer& cmd,
                      const std::vector<std::shared_ptr<Mesh>>& scene);
     void draw(int frameNum, const std::vector<std::shared_ptr<Mesh>>& scene);
@@ -79,15 +65,13 @@ class VulkanRenderer : public Renderer
     Image _depthImage{};
     VkExtent2D _drawExtent{ 0, 0 };
 
-    struct TempPushConstant
-    {
-        glm::mat4x4 worldMatrix;
-        VkDeviceAddress vertexBufferAddress;
-    };
+    DescriptorManager _descriptorManager{};
+    VkDescriptorSetLayout _sceneLayout = VK_NULL_HANDLE;
+    VkDescriptorSet _sceneSet = VK_NULL_HANDLE;
+    VkPipeline _diffusePipeline = VK_NULL_HANDLE;
+    VkPipelineLayout _diffusePipelineLayout = VK_NULL_HANDLE;
 
-    VkPipeline _vertexColorPipeline = VK_NULL_HANDLE;
-    VkPipelineLayout _vertexColorPipelineLayout = VK_NULL_HANDLE;
-
+    Buffer _sceneUniformBuffer{};
     std::unordered_map<std::string, MeshBuffers> _meshBuffersMap;
 
     int _frameOverlap = 2;

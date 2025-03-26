@@ -5,6 +5,7 @@
 #include <string>
 #include <glm/vec3.hpp>
 #include <glm/vec4.hpp>
+#include <glm/mat4x4.hpp>
 
 namespace baldwin
 {
@@ -23,6 +24,16 @@ struct Mesh
     std::string uuid;
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
+};
+
+struct SceneData
+{
+    glm::mat4 view;
+    glm::mat4 proj;
+    glm::mat4 viewproj;
+    glm::vec4 ambientColor; // w for intensity
+    glm::vec4 sunlightDirection;
+    glm::vec4 sunlightColor; // w for intensity
 };
 
 } // namespace baldwin

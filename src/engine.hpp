@@ -3,8 +3,8 @@
 #include <memory>
 #include <GLFW/glfw3.h>
 
-#include "scene/mesh.hpp"
 #include "renderer/renderer.hpp"
+#include "renderer/render_types.hpp"
 
 namespace baldwin
 {

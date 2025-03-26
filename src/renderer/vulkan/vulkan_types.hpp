@@ -2,7 +2,7 @@
 
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
-#include <vulkan/vulkan_core.h>
+#include <glm/mat4x4.hpp>
 
 namespace baldwin
 {
@@ -29,6 +29,12 @@ struct MeshBuffers
 {
     Buffer vertexBuffer;
     Buffer indexBuffer;
+    VkDeviceAddress vertexBufferAddress;
+};
+
+struct RasterizePushConstants
+{
+    glm::mat4x4 worldMatrix;
     VkDeviceAddress vertexBufferAddress;
 };
 

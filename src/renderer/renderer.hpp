@@ -5,7 +5,7 @@
 #include <functional>
 #include <GLFW/glfw3.h>
 
-#include "scene/mesh.hpp"
+#include "render_types.hpp"
 
 namespace baldwin
 {
@@ -23,9 +23,7 @@ struct DeletionQueue
     {
         // reverse iterate the deletion queue to execute all the functions
         for (auto it = deletors.rbegin(); it != deletors.rend(); it++)
-        {
-            (*it)(); // call the function
-        }
+            (*it)();
         deletors.clear();
     }
 };
